@@ -1,115 +1,102 @@
 version: '3.8'
 
 services:
-  # Redis Queue
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    restart: always
-    networks:
-      - app-network
-
-  # Frontend Service
-  frontend:
-    build: ./frontend
-    depends_on:
-      - auth-api
-      - todos-api
-      - users-api
-    restart: always
-    networks:
-      - app-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`swapdevs.tech`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.routers.frontend.tls.certresolver=myresolver"
-
-  # Auth API Service
-  auth-api:
-    build: ./auth-api
-    restart: always
-    depends_on:
-      - redis
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    networks:
-      - app-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.auth-api.rule=Host(`auth.swapdevs.tech`) || (Host(`domain.com`) && PathPrefix(`/api/auth`))"
-      - "traefik.http.routers.auth-api.entrypoints=websecure"
-      - "traefik.http.routers.auth-api.tls.certresolver=myresolver"
-      - "traefik.http.services.auth-api.loadbalancer.server.port=8081"
-
-  # Todos API Service
-  todos-api:
-    build: ./todos-api
-    restart: always
-    depends_on:
-      - redis
-      - auth-api
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - AUTH_API_URL=http://auth-api:8081
-    networks:
-      - app-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.todos-api.rule=Host(`todos.swapdevs.tech`) || (Host(`swapdevs.tech`) && PathPrefix(`/api/todos`))"
-      - "traefik.http.routers.todos-api.entrypoints=websecure"
-      - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
-      - "traefik.http.services.todos-api.loadbalancer.server.port=8082"
-
-  # Users API Service
-  users-api:
-    build: ./users-api
-    restart: always
-    depends_on:
-      - redis
-      - auth-api
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - AUTH_API_URL=http://auth-api:8081
-    networks:
-      - app-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.users-api.rule=Host(`users.swapdevs.tech`) || (Host(`swapdevs.tech`) && PathPrefix(`/api/users`))"
-      - "traefik.http.routers.users-api.entrypoints=websecure"
-      - "traefik.http.routers.users-api.tls.certresolver=myresolver"
-      - "traefik.http.services.users-api.loadbalancer.server.port=8083"
-
-  # Log Message Processor
-  log-processor:
-    build: ./log-message-processor
-    restart: always
-    depends_on:
-      - redis
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    networks:
-      - app-network
-
-  # Traefik Reverse Proxy
   traefik:
-    image: traefik:v2.9
-    restart: always
+    image: traefik:v2.5
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=admin@swadevops.tech"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./traefik/traefik.yml:/etc/traefik/traefik.yml
-      - ./traefik/config:/etc/traefik/config
-      - ./traefik/certificates:/certificates
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
     networks:
       - app-network
+
+  redis:
+    image: redis:6.2-alpine
+    networks:
+      - app-network
+
+  frontend:
+    build: ./frontend
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`swadevops.tech`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+      - "traefik.http.routers.frontend-http.rule=Host(`swadevops.tech`)"
+      - "traefik.http.routers.frontend-http.entrypoints=web"
+      - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+    networks:
+      - app-network
+    depends_on:
+      - auth-api
+      - todos-api
+      - users-api
+
+  auth-api:
+    build: ./auth-api
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=Host(`auth.swadevops.tech`) || (Host(`swadevops.tech`) && PathPrefix(`/api/auth`))"
+      - "traefik.http.routers.auth.entrypoints=websecure"
+      - "traefik.http.routers.auth.tls.certresolver=myresolver"
+      - "traefik.http.services.auth.loadbalancer.server.port=8080"
+    networks:
+      - app-network
+    depends_on:
+      - redis
+
+  todos-api:
+    build: ./todos-api
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.todos.rule=Host(`todos.swadevops.tech`) || (Host(`swadevops.tech`) && PathPrefix(`/api/todos`))"
+      - "traefik.http.routers.todos.entrypoints=websecure"
+      - "traefik.http.routers.todos.tls.certresolver=myresolver"
+      - "traefik.http.services.todos.loadbalancer.server.port=3000"
+    networks:
+      - app-network
+    depends_on:
+      - redis
+      - auth-api
+
+  users-api:
+    build: ./users-api
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.users.rule=Host(`users.swadevops.tech`) || (Host(`swadevops.tech`) && PathPrefix(`/api/users`))"
+      - "traefik.http.routers.users.entrypoints=websecure"
+      - "traefik.http.routers.users.tls.certresolver=myresolver"
+      - "traefik.http.services.users.loadbalancer.server.port=8080"
+    networks:
+      - app-network
+    depends_on:
+      - redis
+      - auth-api
+
+  log-message-processor:
+    build: ./log-message-processor
+    restart: always
+    networks:
+      - app-network
+    depends_on:
+      - redis
 
 networks:
   app-network:
