@@ -1,3 +1,11 @@
-redis==2.10.6
-py_zipkin==0.11.0
-requests
+redis
+py_zipkin==0.20.0
+thriftpy2==0.4.16
+loguru==0.7.2
+structlog==23.1.0
+rq==1.15.1
+fastapi==0.109.0
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+python-dotenv==1.0.1
+
