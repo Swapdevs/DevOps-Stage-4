@@ -1,0 +1,53 @@
+version: '3.8'
+services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.enable=true"
+
+  frontend:
+    build: ./frontend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`localhost`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+
+  auth-api:
+    build: ./auth-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth-api.rule=Host(`localhost`) && PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.auth-api.entrypoints=web"
+
+  todos-api:
+    build: ./todos-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.todos-api.rule=Host(`localhost`) && PathPrefix(`/api/todos`)"
+      - "traefik.http.routers.todos-api.entrypoints=web"
+
+  users-api:
+    build: ./users-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.users-api.rule=Host(`localhost`) && PathPrefix(`/api/users`)"
+      - "traefik.http.routers.users-api.entrypoints=web"
+
+  log-processor:
+    build: ./log-message-processor
+    depends_on:
+      - redis
+    labels:
+      - "traefik.enable=false"  # Disable Traefik since it’s not a web service
+
+  redis:
+    image: redis:alpine
