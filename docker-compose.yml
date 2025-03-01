@@ -1,5 +1,4 @@
-version: '3.8'
-
+version: "3"
 services:
   traefik:
     image: traefik:v2.10
@@ -8,9 +7,11 @@ services:
       - "--providers.docker=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.myresolver.acme.email=admin@swapdevs.tech"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=your@email.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
     ports:
       - "80:80"
       - "443:443"
@@ -18,6 +19,8 @@ services:
     volumes:
       - ./letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - app-network
 
   frontend:
     build: ./frontend
@@ -26,40 +29,49 @@ services:
       - "traefik.http.routers.frontend.rule=Host(`swapdevs.tech`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=myresolver"
+    networks:
+      - app-network
 
   auth-api:
     build: ./auth-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.auth-api.rule=Host(`auth.swapdevs.tech`)"
+      - "traefik.http.routers.auth-api.rule=Host(`swapdevs.tech`) && PathPrefix(`/api/auth`)"
       - "traefik.http.routers.auth-api.entrypoints=websecure"
       - "traefik.http.routers.auth-api.tls.certresolver=myresolver"
+    networks:
+      - app-network
 
   todos-api:
     build: ./todos-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.todos-api.rule=Host(`todos.swapdevs.tech`)"
+      - "traefik.http.routers.todos-api.rule=Host(`swapdevs.tech`) && PathPrefix(`/api/todos`)"
       - "traefik.http.routers.todos-api.entrypoints=websecure"
       - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
+    networks:
+      - app-network
 
   users-api:
     build: ./users-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.users-api.rule=Host(`users.swapdevs.tech`)"
+      - "traefik.http.routers.users-api.rule=Host(`swapdevs.tech`) && PathPrefix(`/api/users`)"
       - "traefik.http.routers.users-api.entrypoints=websecure"
       - "traefik.http.routers.users-api.tls.certresolver=myresolver"
+    networks:
+      - app-network
+
+  log-processor:
+    build: ./log-message-processor
+    networks:
+      - app-network
 
   redis:
     image: redis:6.2
-    command: redis-server --requirepass your-redis-password
-
-  log-message-processor:
-    build: ./log-message-processor
-    depends_on:
-      - redis
+    networks:
+      - app-network
 
 networks:
-  default:
-    name: todo-network
+  app-network:
+    driver: bridge
