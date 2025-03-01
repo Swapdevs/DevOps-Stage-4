@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   traefik:
     image: traefik:v2.10
@@ -6,48 +7,59 @@ services:
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.email=admin@swapdevs.tech"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
     ports:
       - "80:80"
-      - "8080:8080"
+      - "443:443"
+      - "8080:8080" # Traefik dashboard
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    labels:
-      - "traefik.enable=true"
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
   frontend:
     build: ./frontend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`localhost`)"
-      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.rule=Host(`swapdevs.tech`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=myresolver"
 
   auth-api:
     build: ./auth-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.auth-api.rule=Host(`localhost`) && PathPrefix(`/api/auth`)"
-      - "traefik.http.routers.auth-api.entrypoints=web"
+      - "traefik.http.routers.auth-api.rule=Host(`auth.swapdevs.tech`)"
+      - "traefik.http.routers.auth-api.entrypoints=websecure"
+      - "traefik.http.routers.auth-api.tls.certresolver=myresolver"
 
   todos-api:
     build: ./todos-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.todos-api.rule=Host(`localhost`) && PathPrefix(`/api/todos`)"
-      - "traefik.http.routers.todos-api.entrypoints=web"
+      - "traefik.http.routers.todos-api.rule=Host(`todos.swapdevs.tech`)"
+      - "traefik.http.routers.todos-api.entrypoints=websecure"
+      - "traefik.http.routers.todos-api.tls.certresolver=myresolver"
 
   users-api:
     build: ./users-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.users-api.rule=Host(`localhost`) && PathPrefix(`/api/users`)"
-      - "traefik.http.routers.users-api.entrypoints=web"
+      - "traefik.http.routers.users-api.rule=Host(`users.swapdevs.tech`)"
+      - "traefik.http.routers.users-api.entrypoints=websecure"
+      - "traefik.http.routers.users-api.tls.certresolver=myresolver"
 
-  log-processor:
+  redis:
+    image: redis:6.2
+    command: redis-server --requirepass your-redis-password
+
+  log-message-processor:
     build: ./log-message-processor
     depends_on:
       - redis
-    labels:
-      - "traefik.enable=false"  # Disable Traefik since it’s not a web service
 
-  redis:
-    image: redis:alpine
+networks:
+  default:
+    name: todo-network
